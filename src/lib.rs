@@ -1,5 +1,10 @@
 use bitflags::bitflags;
 
+mod parse;
+
+pub use parse::read_all;
+pub use parse::read_filter;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Mapping {
     pub start: usize,
@@ -8,22 +13,33 @@ pub struct Mapping {
     pub offset: usize,
     pub device: Device,
     pub inode: usize,
-    pub path: String,
+    pub path: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Usage {
     pub size: usize,
+    pub kernel_page_size: usize,
+    pub mmu_page_size: usize,
     pub rss: usize,
     pub pss: usize,
+    pub pss_dirty: usize,
     pub shared_clean: usize,
     pub shared_dirty: usize,
     pub private_clean: usize,
     pub private_dirty: usize,
     pub referenced: usize,
     pub anonymous: usize,
+    pub ksm: usize,
+    pub lazy_free: usize,
     pub anon_huge_pages: usize,
     pub shmem_huge_pages: usize,
     pub shmem_pmd_mapped: usize,
+    pub file_pmd_mapped: usize,
+    pub shared_hugetlb: usize,
+    pub private_hugetlb: usize,
     pub swap: usize,
-    pub kernel_page_size: usize,
-    pub mmu_page_size: usize,
+    pub swap_pss: usize,
     pub locked: usize,
     pub thp_eligible: bool,
     pub protection_key: Option<usize>,
@@ -48,7 +64,7 @@ pub struct Device {
 }
 
 bitflags! {
-    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+    #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
     pub struct VmFlags: u32 {
         /// readable
         const RD = 1 << 0;

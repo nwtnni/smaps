@@ -1,3 +1,3 @@
 fn main() {
-    println!("Hello, world!");
+    dbg!(smaps::read_all("/proc/self/smaps".as_ref()).unwrap());
 }
