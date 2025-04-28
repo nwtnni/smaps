@@ -20,12 +20,7 @@ pub fn read_filter<F: FnMut(&Mapping) -> bool>(
     mut filter: F,
 ) -> std::io::Result<Vec<(Mapping, Usage)>> {
     let reader = File::open(path).map(BufReader::new)?;
-    let mut iter = reader
-        .lines()
-        .inspect(|line| {
-            dbg!(line);
-        })
-        .peekable();
+    let mut iter = reader.lines().peekable();
     let mut out = Vec::new();
 
     while let Some(line) = iter.next() {
