@@ -12,14 +12,13 @@ use crate::Permissions;
 use crate::Usage;
 use crate::VmFlags;
 
-#[allow(private_interfaces)]
 pub struct Parser<R: BufRead, S> {
     iter: iter::Peekable<std::io::Lines<R>>,
     _state: S,
 }
 
-struct ParseMapping;
-struct ParseUsage;
+pub struct ParseMapping;
+pub struct ParseUsage;
 
 impl Parser<BufReader<File>, ParseMapping> {
     pub fn open(path: &Path) -> std::io::Result<Self> {
