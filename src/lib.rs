@@ -2,8 +2,7 @@ use bitflags::bitflags;
 
 mod parse;
 
-pub use parse::read_all;
-pub use parse::read_filter;
+pub use parse::Parser;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Mapping {

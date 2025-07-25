@@ -1,3 +1,4 @@
+use core::iter;
 use core::iter::Peekable;
 use core::ops::BitOr;
 use std::fs::File;
@@ -11,48 +12,52 @@ use crate::Permissions;
 use crate::Usage;
 use crate::VmFlags;
 
-pub fn read_all(path: &Path) -> std::io::Result<Vec<(Mapping, Usage)>> {
-    read_filter(path, |_| true)
-}
+pub struct Parser<R: BufRead>(iter::Peekable<std::io::Lines<R>>);
 
-pub fn read_filter<F: FnMut(&Mapping) -> bool>(
-    path: &Path,
-    mut filter: F,
-) -> std::io::Result<Vec<(Mapping, Usage)>> {
-    let reader = File::open(path).map(BufReader::new)?;
-    let mut iter = reader.lines().peekable();
-    let mut out = Vec::new();
-
-    while let Some(line) = iter.next() {
-        let line = line?;
-
-        let mapping = Mapping::parse(&line).expect("Failed to parse mapping");
-        if !filter(&mapping) {
-            while iter
-                .peek()
-                .map(Result::as_ref)
-                .is_some_and(|line| line.is_ok_and(|line| !line.contains('-')))
-            {
-                iter.next();
-            }
-            continue;
-        }
-
-        let usage = Usage::parse(&mut iter).expect("Failed to parse usage");
-        out.push((mapping, usage));
+impl Parser<BufReader<File>> {
+    pub fn open(path: &Path) -> std::io::Result<Self> {
+        File::open(path)
+            .map(BufReader::new)
+            .map(BufReader::lines)
+            .map(Iterator::peekable)
+            .map(Self)
     }
 
-    Ok(out)
+    pub fn next_mapping(&mut self) -> std::io::Result<Option<Mapping>> {
+        Ok(self
+            .0
+            .next()
+            .transpose()?
+            .as_deref()
+            .and_then(Mapping::parse))
+    }
+
+    pub fn next_usage(&mut self) -> std::io::Result<Option<Usage>> {
+        Usage::parse(&mut self.0)
+    }
+
+    pub fn skip_usage(&mut self) {
+        while self
+            .0
+            .peek()
+            .map(Result::as_ref)
+            .is_some_and(|line| line.is_ok_and(|line| !line.contains('-')))
+        {
+            self.0.next();
+        }
+    }
 }
 
 impl Usage {
-    fn parse(iter: &mut Peekable<impl Iterator<Item = std::io::Result<String>>>) -> Option<Self> {
+    fn parse(
+        iter: &mut Peekable<impl Iterator<Item = std::io::Result<String>>>,
+    ) -> std::io::Result<Option<Self>> {
         let mut usage = Self::default();
 
         while let Some(line) =
             iter.next_if(|line| line.as_ref().is_ok_and(|line| !line.contains('-')))
         {
-            let line = line.ok()?;
+            let line = line?;
 
             if line.starts_with("VmFlags") {
                 usage.vm_flags =
@@ -60,7 +65,10 @@ impl Usage {
                 continue;
             }
 
-            let (key, value) = Self::parse_line(&line)?;
+            let Some((key, value)) = Self::parse_line(&line) else {
+                return Ok(None);
+            };
+
             match key {
                 "Size" => usage.size = value,
                 "KernelPageSize" => usage.kernel_page_size = value,
@@ -90,7 +98,7 @@ impl Usage {
             }
         }
 
-        Some(usage)
+        Ok(Some(usage))
     }
 
     fn parse_line(line: &str) -> Option<(&str, usize)> {
