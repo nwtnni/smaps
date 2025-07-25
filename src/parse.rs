@@ -12,38 +12,66 @@ use crate::Permissions;
 use crate::Usage;
 use crate::VmFlags;
 
-pub struct Parser<R: BufRead>(iter::Peekable<std::io::Lines<R>>);
+#[allow(private_interfaces)]
+pub struct Parser<R: BufRead, S> {
+    iter: iter::Peekable<std::io::Lines<R>>,
+    _state: S,
+}
 
-impl Parser<BufReader<File>> {
+struct ParseMapping;
+struct ParseUsage;
+
+impl Parser<BufReader<File>, ParseMapping> {
     pub fn open(path: &Path) -> std::io::Result<Self> {
         File::open(path)
             .map(BufReader::new)
             .map(BufReader::lines)
             .map(Iterator::peekable)
-            .map(Self)
+            .map(|iter| Self {
+                iter,
+                _state: ParseMapping,
+            })
     }
+}
 
-    pub fn next_mapping(&mut self) -> std::io::Result<Option<Mapping>> {
-        Ok(self
-            .0
+impl<R: BufRead> Parser<R, ParseMapping> {
+    pub fn next(mut self) -> std::io::Result<(Parser<R, ParseUsage>, Option<Mapping>)> {
+        let mapping = self
+            .iter
             .next()
             .transpose()?
             .as_deref()
-            .and_then(Mapping::parse))
+            .and_then(Mapping::parse);
+
+        Ok((self.with_state(ParseUsage), mapping))
+    }
+}
+
+impl<R: BufRead> Parser<R, ParseUsage> {
+    pub fn next(mut self) -> std::io::Result<(Parser<R, ParseMapping>, Option<Usage>)> {
+        let usage = Usage::parse(&mut self.iter)?;
+        Ok((self.with_state(ParseMapping), usage))
     }
 
-    pub fn next_usage(&mut self) -> std::io::Result<Option<Usage>> {
-        Usage::parse(&mut self.0)
-    }
-
-    pub fn skip_usage(&mut self) {
+    pub fn skip(mut self) -> Parser<R, ParseMapping> {
         while self
-            .0
+            .iter
             .peek()
             .map(Result::as_ref)
             .is_some_and(|line| line.is_ok_and(|line| !line.contains('-')))
         {
-            self.0.next();
+            self.iter.next();
+        }
+
+        self.with_state(ParseMapping)
+    }
+}
+
+impl<R: BufRead, S> Parser<R, S> {
+    fn with_state<T>(self, state: T) -> Parser<R, T> {
+        Parser {
+            iter: self.iter,
+            _state: state,
         }
     }
 }
